@@ -60,6 +60,7 @@ def run():
             for entry_id, fields in entries:
                 process(fields)
                 client.xack(STREAM_NAME, CONSUMER_GROUP, entry_id)
+                client.xdel(STREAM_NAME, entry_id)
 
 
 if __name__ == "__main__":
