@@ -13,8 +13,9 @@ main.py                 # entrypoint: ensures the consumer group exists, starts 
 config.py                # all env vars, single load_dotenv() call
 redis_client.py           # shared Redis connection
 services/
-  sender.py                # send_email(to, subject, html) via Resend
-  templates.py              # subject/body builders per event type
+  sender.py                # send_email(to, subject, html, attachments) via Resend
+  templates.py              # subject/body/attachments builders per event type
+  pdf_statement.py           # builds the monthly statement PDF (reportlab)
 workers/
   setup_group.py             # one-off: creates the "email-workers" consumer group
   worker.py                 # xreadgroup loop: dispatch -> send -> xack
@@ -69,27 +70,50 @@ All events are published to a single stream, `rg:emails`, as a hash with
 ```
 
 ### `expense_split`
+Sent after a room's balances are recomputed (e.g. once a new expense is
+added). Mirrors the app's Splits screen: total pending, per-member
+balances, and the simplified "who pays whom" settlement list.
 ```json
 {
   "expense_title": "Groceries",
-  "paid_by": "Sankar",
+  "total_pending": 500,
   "members": [
-    { "name": "Sankar", "email": "sankar@example.com", "amount_owed": 250 },
-    { "name": "Ravi", "email": "ravi@example.com", "amount_owed": 250 }
+    { "name": "Sankar", "email": "sankar@example.com", "pending_amount": 250 },
+    { "name": "Ravi", "email": "ravi@example.com", "pending_amount": -250 }
+  ],
+  "settlements": [
+    { "from_name": "Ravi", "to_name": "Sankar", "amount": 250 }
   ]
 }
 ```
+`pending_amount` follows the app's convention: positive = "gets back",
+negative = "owes", ~0 = "settled up". `settlements` is the backend's
+debt-simplified transaction list; omit or send an empty list when the
+room is fully settled.
 
 ### `monthly_summary`
+Sent once per month per room. The email body has a condensed summary;
+a full itemized statement (every expense, who paid, who participated,
+totals by member, top-spender analytics) is generated as a PDF and
+attached, like a bank statement.
 ```json
 {
   "month": "August 2026",
+  "expenses": [
+    { "title": "Groceries", "amount": 500, "paid_by": "Sankar", "participants": ["Sankar", "Ravi"], "date": "2026-08-03" },
+    { "title": "Gas bill", "amount": 300, "paid_by": "Ravi", "participants": ["Sankar", "Ravi"], "date": "2026-08-10" }
+  ],
   "members": [
-    { "name": "Sankar", "email": "sankar@example.com", "total_owed": 1200 },
-    { "name": "Ravi", "email": "ravi@example.com", "total_owed": 800 }
+    { "name": "Sankar", "email": "sankar@example.com", "total_paid": 500, "total_share": 400 },
+    { "name": "Ravi", "email": "ravi@example.com", "total_paid": 300, "total_share": 400 }
   ]
 }
 ```
+`total_paid` is what the member actually paid across the month's
+expenses; `total_share` is their portion of the total. `total_paid -
+total_share` is their net position (positive = gets back, negative =
+owes), shown in both the email body and the PDF. `date` is
+`YYYY-MM-DD`; the PDF's "Expense History" table is sorted by it.
 
 ## Why consumer groups
 

@@ -27,11 +27,12 @@ def process(fields):
         print(f"unknown event type: {event_type}")
         return
 
-    subject, body = handler(payload)
+    result = handler(payload)
+    subject, body, attachments = result if len(result) == 3 else (*result, None)
 
     for to in recipients_for(event_type, payload):
         try:
-            send_email(to, subject, body)
+            send_email(to, subject, body, attachments=attachments)
             print(f"sent {event_type} to {to}")
         except Exception as e:
             print(f"FAILED sending {event_type} to {to}: {e}")
