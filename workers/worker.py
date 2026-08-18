@@ -1,4 +1,7 @@
 import json
+import time
+
+import redis
 
 from config import STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME
 from redis_client import client
@@ -41,9 +44,15 @@ def process(fields):
 def run():
     print(f"worker '{CONSUMER_NAME}' listening on stream '{STREAM_NAME}'...")
     while True:
-        resp = client.xreadgroup(
-            CONSUMER_GROUP, CONSUMER_NAME, {STREAM_NAME: ">"}, block=5000, count=10
-        )
+        try:
+            resp = client.xreadgroup(
+                CONSUMER_GROUP, CONSUMER_NAME, {STREAM_NAME: ">"}, block=5000, count=10
+            )
+        except (redis.exceptions.TimeoutError, redis.exceptions.ConnectionError) as e:
+            print(f"redis connection hiccup, retrying: {e}")
+            time.sleep(1)
+            continue
+
         if not resp:
             continue
 
