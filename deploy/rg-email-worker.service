@@ -1,0 +1,16 @@
+[Unit]
+Description=RG Email Microservice Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/rg-email-microservice
+EnvironmentFile=/home/ubuntu/rg-email-microservice/.env
+ExecStart=/home/ubuntu/rg-email-microservice/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
